@@ -1,8 +1,4 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
-import os
 import random
-import asyncio
 import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -12,7 +8,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 user_balance = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! мои команды: /start , /earn , /balance")
+    await update.message.reply_text("👋 Привет! /earn /balance")
 
 async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -30,32 +26,25 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_balance[user_id] = user_balance.get(user_id, 0) + coins
 
-    await update.message.reply_text(f"+{coins} 💰 Баланс: {user_balance[user_id]}")
+    await update.message.reply_text(
+        f"+{coins} 💰 Баланс: {user_balance[user_id]}"
+    )
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    await update.message.reply_text(f"Баланс: {user_balance.get(user_id, 0)} 💸")
+    await update.message.reply_text(
+        f"Баланс: {user_balance.get(user_id, 0)} 💸"
+    )
 
-async def main():
+def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("earn", earn))
     app.add_handler(CommandHandler("balance", balance))
 
-    await app.run_polling()
+    print("Bot started")
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is alive")
-
-def run_server():
-    port = int(os.environ.get("PORT", 10000))
-    HTTPServer(("0.0.0.0", port), Handler).serve_forever()
-
-threading.Thread(target=run_server, daemon=True).start()
+    main()
