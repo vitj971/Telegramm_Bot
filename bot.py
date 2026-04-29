@@ -4,7 +4,7 @@ import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.getenv("8698374492:AAGSLSkT7NKsEi9YpLO_R8V1PpQZeNZGt1A")
+TOKEN = os.getenv("8698374492:AAHK4Wa-SrXHVfTt-5sW20-IfHMMytTEVjk")
 
 user_balance = {}
 
@@ -32,8 +32,6 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await update.message.reply_text(f"Баланс: {user_balance.get(user_id, 0)} 💸")
-
-print("TOKEN =", TOKEN)
 
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
