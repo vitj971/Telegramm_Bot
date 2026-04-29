@@ -1,14 +1,15 @@
 import random
 import asyncio
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = "8698374492:AAGSLSkT7NKsEi9YpLO_R8V1PpQZeNZGt1A"
+TOKEN = os.getenv("8698374492:AAGSLSkT7NKsEi9YpLO_R8V1PpQZeNZGt1A")
 
 user_balance = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! мои команды: /earn ; /start ; /balance 🙂")
+    await update.message.reply_text("👋 Привет! мои команды: /start , /earn , /balance")
 
 async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -24,25 +25,13 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         coins = random.randint(300, 855)
 
-    if user_id not in user_balance:
-        user_balance[user_id] = 0
+    user_balance[user_id] = user_balance.get(user_id, 0) + coins
 
-    user_balance[user_id] += coins
-
-    await update.message.reply_text(
-        f"Ты заработал {coins} Бебракоинов! 💰\n"
-        f"Баланс: {user_balance[user_id]} 💸"
-    )
+    await update.message.reply_text(f"+{coins} 💰 Баланс: {user_balance[user_id]}")
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-
-    if user_id not in user_balance:
-        user_balance[user_id] = 0
-
-    await update.message.reply_text(
-        f"Твой баланс: {user_balance[user_id]} 💸"
-    )
+    await update.message.reply_text(f"Баланс: {user_balance.get(user_id, 0)} 💸")
 
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -51,7 +40,6 @@ async def main():
     app.add_handler(CommandHandler("earn", earn))
     app.add_handler(CommandHandler("balance", balance))
 
-    print("Запуск...")
     await app.run_polling()
 
 if __name__ == "__main__":
