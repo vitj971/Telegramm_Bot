@@ -33,6 +33,8 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await update.message.reply_text(f"Баланс: {user_balance.get(user_id, 0)} 💸")
 
+print("TOKEN =", TOKEN)
+
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
