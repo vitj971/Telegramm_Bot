@@ -1,4 +1,5 @@
 import random
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
@@ -43,7 +44,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Твой баланс: {user_balance[user_id]} 💸"
     )
 
-def main():
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -51,7 +52,7 @@ def main():
     app.add_handler(CommandHandler("balance", balance))
 
     print("Запуск...")
-    app.run_polling()
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
