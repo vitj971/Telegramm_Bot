@@ -4,7 +4,7 @@ import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.getenv("8698374492:AAHK4Wa-SrXHVfTt-5sW20-IfHMMytTEVjk")
+TOKEN = os.getenv("BOT_TOKEN")
 
 user_balance = {}
 
