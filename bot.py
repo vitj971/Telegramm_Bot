@@ -1,56 +1,119 @@
 import os
 import random
 import asyncio
+import time
+import sqlite3
 from aiohttp import web
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# ---------------- env ----------------
+# ---------------- CONFIG ----------------
 
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
     raise ValueError("BOT_TOKEN не задан")
 
-# ---------------- memory ----------------
+COOLDOWN = 4 * 60 * 60  # 4 часа
 
-user_balance = {}
+# ---------------- DATABASE ----------------
 
-# ---------------- telegram app ----------------
+conn = sqlite3.connect("bot.db", check_same_thread=False)
+cur = conn.cursor()
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    balance INTEGER DEFAULT 0,
+    last_earn INTEGER DEFAULT 0
+)
+""")
+conn.commit()
+
+
+def get_user(user_id):
+    cur.execute("SELECT balance, last_earn FROM users WHERE user_id=?", (user_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.execute("INSERT INTO users (user_id, balance, last_earn) VALUES (?, 0, 0)", (user_id,))
+        conn.commit()
+        return 0, 0
+    return row
+
+
+def update_user(user_id, balance, last_earn):
+    cur.execute(
+        "REPLACE INTO users (user_id, balance, last_earn) VALUES (?, ?, ?)",
+        (user_id, balance, last_earn)
+    )
+    conn.commit()
+
+
+# ---------------- BOT ----------------
 
 app = ApplicationBuilder().token(TOKEN).build()
 
 
-# ---------------- handlers ----------------
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! /earn /balance")
-
-
-async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    roll = random.random()
-
-    if roll < 0.75:
-        coins = random.randint(10, 50)
-    elif roll < 0.95:
-        coins = random.randint(51, 130)
-    elif roll < 0.995:
-        coins = random.randint(131, 200)
-    else:
-        coins = random.randint(300, 855)
-
-    user_balance[user_id] = user_balance.get(user_id, 0) + coins
-
-    await update.message.reply_text(f"+{coins} 💰 Баланс: {user_balance[user_id]}")
+    await update.message.reply_text("👋 Привет! Используй /earn и /balance")
 
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    await update.message.reply_text(f"Баланс: {user_balance.get(user_id, 0)} 💸")
+    balance, _ = get_user(user_id)
 
+    await update.message.reply_text(f"💰 Баланс: {balance} Бебракоинов")
+
+
+async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+    name = user.first_name
+
+    balance, last_earn = get_user(user_id)
+    now = int(time.time())
+
+    # cooldown check
+    if now - last_earn < COOLDOWN:
+        remaining = COOLDOWN - (now - last_earn)
+        hours = remaining // 3600
+        minutes = (remaining % 3600) // 60
+
+        await update.message.reply_text(
+            f"⏳ Подожди {hours}ч {minutes}м перед следующим заработком!"
+        )
+        return
+
+    roll = random.random()
+
+    if roll < 0.69:
+        coins = random.randint(10, 35)
+        text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
+
+    elif roll < 0.89:  # 69 + 20
+        coins = random.randint(36, 70)
+        text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
+
+    elif roll < 0.96:  # +7
+        coins = random.randint(71, 120)
+        text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
+
+    elif roll < 0.993:  # +3.3
+        coins = random.randint(121, 155)
+        text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
+
+    else:  # 0.7%
+        coins = random.randint(233, 855)
+        text = f"😱 Ничего себе! {name} по дороге на работу нашёл {coins} Бебракоинов! Вот это везение! 🪙"
+
+    balance += coins
+    update_user(user_id, balance, now)
+
+    await update.message.reply_text(text)
+
+
+# ---------------- handlers ----------------
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("earn", earn))
@@ -79,11 +142,7 @@ async def run_server():
     await app.start()
 
     server = web.Application()
-
-    # health check (для UptimeRobot)
     server.router.add_get("/", ping)
-
-    # webhook endpoint (стабильный)
     server.router.add_post("/webhook", webhook_handler)
 
     runner = web.AppRunner(server)
@@ -92,12 +151,10 @@ async def run_server():
     site = web.TCPSite(runner, "0.0.0.0", 10000)
     await site.start()
 
-    # 🔥 FIX: правильный Replit URL
     repl_slug = os.getenv("REPL_SLUG")
     repl_owner = os.getenv("REPL_OWNER")
 
     BASE_URL = f"https://{repl_slug}.{repl_owner}.repl.co"
-
     webhook_url = f"{BASE_URL}/webhook"
 
     await app.bot.set_webhook(url=webhook_url)
