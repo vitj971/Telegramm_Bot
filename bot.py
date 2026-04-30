@@ -1,59 +1,17 @@
-import random
 import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import random
+import asyncio
 from aiohttp import web
 
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
 TOKEN = os.getenv("BOT_TOKEN")
-URL = os.getenv("RENDER_EXTERNAL_URL")  # Render даст его сам
+BASE_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 user_balance = {}
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! /earn /balance")
-
-# ... твои handlers (earn, balance) без изменений ...
-
-def create_app():
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("earn", earn))
-    app.add_handler(CommandHandler("balance", balance))
-
-    return app
-
-telegram_app = create_app()
-
-async def handle(request):
-    data = await request.json()
-    update = Update.de_json(data, telegram_app.bot)
-    await telegram_app.process_update(update)
-    return web.Response()
-
-async def main():
-    web_app = web.Application()
-    web_app.router.add_post(f"/{TOKEN}", handle)
-
-    runner = web.AppRunner(web_app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 10000)
-    await site.start()
-
-    await telegram_app.bot.set_webhook(f"{URL}/{TOKEN}")
-
-    print("Bot started (webhook mode)")
-
-    while True:
-        await asyncio.sleep(3600)
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
-
-TOKEN = os.getenv("BOT_TOKEN")
-
-user_balance = {}
+# ---------------- handlers ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Привет! /earn /balance")
@@ -74,25 +32,49 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_balance[user_id] = user_balance.get(user_id, 0) + coins
 
-    await update.message.reply_text(
-        f"+{coins} 💰 Баланс: {user_balance[user_id]}"
-    )
+    await update.message.reply_text(f"+{coins} 💰 Баланс: {user_balance[user_id]}")
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    await update.message.reply_text(
-        f"Баланс: {user_balance.get(user_id, 0)} 💸"
-    )
+    await update.message.reply_text(f"Баланс: {user_balance.get(user_id, 0)} 💸")
 
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+# ---------------- telegram app ----------------
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("earn", earn))
-    app.add_handler(CommandHandler("balance", balance))
+app = ApplicationBuilder().token(TOKEN).build()
 
-    print("Bot started")
-    app.run_polling()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("earn", earn))
+app.add_handler(CommandHandler("balance", balance))
+
+# ---------------- webhook server ----------------
+
+async def webhook_handler(request):
+    data = await request.json()
+    update = Update.de_json(data, app.bot)
+    await app.process_update(update)
+    return web.Response()
+
+async def run_server():
+    if not TOKEN:
+        raise ValueError("BOT_TOKEN не задан")
+    if not BASE_URL:
+        raise ValueError("RENDER_EXTERNAL_URL не задан")
+
+    server = web.Application()
+    server.router.add_post(f"/{TOKEN}", webhook_handler)
+
+    runner = web.AppRunner(server)
+    await runner.setup()
+
+    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    await site.start()
+
+    await app.bot.set_webhook(f"{BASE_URL}/{TOKEN}")
+
+    print("Bot started (webhook mode)")
+
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(run_server())
