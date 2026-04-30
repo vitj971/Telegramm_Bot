@@ -118,14 +118,12 @@ def set_earn_cd(user_id):
 app = ApplicationBuilder().token(TOKEN).build()
 
 
-# ---------------- START ----------------
+# ---------------- COMMANDS ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user(update.effective_user)
     await update.message.reply_text("👋 Бот готов! /earn /pay /daily /balance /top")
 
-
-# ---------------- BALANCE ----------------
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -138,8 +136,6 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _, _, bal, _, _, _ = get_user(user.id)
     await update.message.reply_text(f"💰 Баланс: {bal}")
 
-
-# ---------------- EARN (FIXED ANTI-ABUSE) ----------------
 
 async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -166,13 +162,10 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         coins = random.randint(233, 855)
 
     bal += coins
-
     update_user(user.id, username, name, bal, 0, 0, int(time.time()))
 
     await update.message.reply_text(f"💰 {name} получил {coins} Бебракоинов! 🎉")
 
-
-# ---------------- PAY ----------------
 
 async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -183,121 +176,60 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_global_cd(user.id)
 
     if not context.args:
-        return await update.message.reply_text("Используй: /pay 100 (reply или @user)")
+        return await update.message.reply_text("Используй: /pay 100")
 
     try:
         amount = int(context.args[0])
     except:
         return await update.message.reply_text("❌ Неверная сумма")
 
-    if amount < 1 or amount > 1_000_000:
-        return await update.message.reply_text("❌ 1 - 1 000 000")
-
     sender = get_user(user.id)
-    sender_balance = sender[2]
 
-    if sender_balance < amount:
+    if sender[2] < amount:
         return await update.message.reply_text("❌ Нет денег")
 
-    receiver = None
+    if not update.message.reply_to_message:
+        return await update.message.reply_text("❌ Ответь на сообщение пользователя")
 
-    if update.message.reply_to_message:
-        receiver = update.message.reply_to_message.from_user
-
-    elif len(context.args) > 1:
-        target = context.args[1].replace("@", "")
-        cur.execute("SELECT user_id FROM users WHERE username=?", (target,))
-        row = cur.fetchone()
-
-        if row:
-            receiver = type("obj", (), {
-                "id": row[0],
-                "username": target,
-                "first_name": target
-            })()
-
-    if not receiver:
-        return await update.message.reply_text("❌ Игрок не найден")
-
+    receiver = update.message.reply_to_message.from_user
     ensure_user(receiver)
 
     _, _, receiver_balance, _, _, _ = get_user(receiver.id)
 
-    sender_balance -= amount
-    receiver_balance += amount
-
     update_user(user.id, user.username or "", user.first_name or "Игрок",
-                sender_balance, 0, 0, int(time.time()))
+                sender[2] - amount, 0, 0, int(time.time()))
 
     update_user(receiver.id, receiver.username or "", receiver.first_name or "Игрок",
-                receiver_balance, 0, 0, 0)
+                receiver_balance + amount, 0, 0, 0)
 
-    await update.message.reply_text(
-        f"{user.first_name} дал {amount} Бебракоинов {receiver.first_name} 💸"
-    )
+    await update.message.reply_text("💸 Перевод выполнен")
 
-
-# ---------------- DAILY ----------------
 
 async def daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ensure_user(user)
 
-    if global_cd(user.id):
-        return await update.message.reply_text("⏳ 3 сек")
-    set_global_cd(user.id)
-
     username, name, bal, last_daily, _, _ = get_user(user.id)
     now = int(time.time())
 
     if now - last_daily < DAILY_CD:
-        rem = DAILY_CD - (now - last_daily)
-        return await update.message.reply_text(f"⏳ Жди {rem//3600}ч {(rem%3600)//60}м")
+        return await update.message.reply_text("⏳ Уже забирал")
 
-    roll = random.random()
-
-    if roll < 0.33:
-        reward = 100
-    elif roll < 0.66:
-        reward = 150
-    elif roll < 0.99:
-        reward = 200
-    else:
-        reward = 750
-
-    bal += reward
-
+    bal += random.randint(100, 200)
     update_user(user.id, username, name, bal, now, 0, 0)
 
-    if reward == 750:
-        text = f"🍀 Счастливчик {name} получил {reward}!"
-    else:
-        text = f"✨ {name} получил {reward} Бебракоинов"
+    await update.message.reply_text(f"🎁 +{bal}")
 
-    await update.message.reply_text(text)
-
-
-# ---------------- TOP ----------------
 
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if global_cd(update.effective_user.id):
-        return await update.message.reply_text("⏳ 3 сек")
-    set_global_cd(update.effective_user.id)
-
     data = get_top(10)
-
-    medals = ["🥇", "🥈", "🥉"]
-    text = "🏆 Топ игроков:\n\n"
+    text = "🏆 Топ:\n\n"
 
     for i, (username, name, bal) in enumerate(data):
-        display = f"@{username}" if username else name
-        medal = medals[i] if i < 3 else f"{i+1}."
-        text += f"{medal} {display} — {bal} 💰\n"
+        text += f"{i+1}. {name} — {bal}\n"
 
     await update.message.reply_text(text)
 
-
-# ---------------- COMMANDS ----------------
 
 async def set_commands():
     await app.bot.set_my_commands([
@@ -310,7 +242,11 @@ async def set_commands():
     ])
 
 
-# ---------------- WEBHOOK ----------------
+# ---------------- WEB ----------------
+
+async def home(request):
+    return web.Response(text="I'm alive")
+
 
 async def webhook(request):
     data = await request.json()
@@ -322,23 +258,22 @@ async def webhook(request):
 async def main():
     await app.initialize()
     await app.start()
-
     await set_commands()
 
     server = web.Application()
     server.router.add_post("/webhook", webhook)
+    server.router.add_get("/", home)
 
     runner = web.AppRunner(server)
     await runner.setup()
 
-    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    site = web.TCPSite(runner, "0.0.0.0", 8080)
     await site.start()
 
     repl_slug = os.getenv("REPL_SLUG")
     repl_owner = os.getenv("REPL_OWNER")
 
     url = f"https://{repl_slug}.{repl_owner}.repl.co/webhook"
-
     await app.bot.set_webhook(url=url)
 
     print("🤖 Bot running:", url)
