@@ -35,19 +35,32 @@ conn.commit()
 def get_user(user_id):
     cur.execute("SELECT balance, last_earn FROM users WHERE user_id=?", (user_id,))
     row = cur.fetchone()
+
     if not row:
-        cur.execute("INSERT INTO users (user_id, balance, last_earn) VALUES (?, 0, 0)", (user_id,))
+        cur.execute(
+            "INSERT INTO users (user_id, balance, last_earn) VALUES (?, 0, 0)",
+            (user_id,)
+        )
         conn.commit()
         return 0, 0
+
     return row
 
 
-def update_user(user_id, balance, last_earn):
+def save_user(user_id, balance, last_earn):
     cur.execute(
         "REPLACE INTO users (user_id, balance, last_earn) VALUES (?, ?, ?)",
         (user_id, balance, last_earn)
     )
     conn.commit()
+
+
+def get_top_users(limit=10):
+    cur.execute(
+        "SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT ?",
+        (limit,)
+    )
+    return cur.fetchall()
 
 
 # ---------------- BOT ----------------
@@ -56,7 +69,7 @@ app = ApplicationBuilder().token(TOKEN).build()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! Используй /earn и /balance")
+    await update.message.reply_text("👋 Привет! /earn /balance /top")
 
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,7 +87,7 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balance, last_earn = get_user(user_id)
     now = int(time.time())
 
-    # cooldown check
+    # cooldown
     if now - last_earn < COOLDOWN:
         remaining = COOLDOWN - (now - last_earn)
         hours = remaining // 3600
@@ -91,28 +104,29 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         coins = random.randint(10, 35)
         text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
 
-    elif roll < 0.89:  # 69 + 20
+    elif roll < 0.89:
         coins = random.randint(36, 70)
         text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
 
-    elif roll < 0.96:  # +7
+    elif roll < 0.96:
         coins = random.randint(71, 120)
         text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
 
-    elif roll < 0.993:  # +3.3
+    elif roll < 0.993:
         coins = random.randint(121, 155)
         text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
 
-    else:  # 0.7%
+    else:
         coins = random.randint(233, 855)
         text = f"😱 Ничего себе! {name} по дороге на работу нашёл {coins} Бебракоинов! Вот это везение! 💸"
 
     balance += coins
-    update_user(user_id, balance, now)
+    save_user(user_id, balance, now)
 
     await update.message.reply_text(text)
- 
-    async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
     top_users = get_top_users(10)
 
     if not top_users:
@@ -127,7 +141,7 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 
-# ---------------- handlers ----------------
+# ---------------- HANDLERS ----------------
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("earn", earn))
@@ -135,7 +149,7 @@ app.add_handler(CommandHandler("balance", balance))
 app.add_handler(CommandHandler("top", top))
 
 
-# ---------------- webhook ----------------
+# ---------------- WEB SERVER ----------------
 
 async def ping(request):
     return web.Response(text="ok")
