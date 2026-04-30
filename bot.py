@@ -5,7 +5,7 @@ import time
 import sqlite3
 from aiohttp import web
 
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # ---------------- CONFIG ----------------
@@ -25,6 +25,8 @@ cur = conn.cursor()
 cur.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    first_name TEXT,
     balance INTEGER DEFAULT 0,
     last_earn INTEGER DEFAULT 0
 )
@@ -33,33 +35,40 @@ conn.commit()
 
 
 def get_user(user_id):
-    cur.execute("SELECT balance, last_earn FROM users WHERE user_id=?", (user_id,))
+    cur.execute("""
+        SELECT username, first_name, balance, last_earn
+        FROM users
+        WHERE user_id=?
+    """, (user_id,))
     row = cur.fetchone()
 
     if not row:
-        cur.execute(
-            "INSERT INTO users (user_id, balance, last_earn) VALUES (?, 0, 0)",
-            (user_id,)
-        )
+        cur.execute("""
+            INSERT INTO users (user_id, username, first_name, balance, last_earn)
+            VALUES (?, '', '', 0, 0)
+        """, (user_id,))
         conn.commit()
-        return 0, 0
+        return "", "", 0, 0
 
     return row
 
 
-def save_user(user_id, balance, last_earn):
-    cur.execute(
-        "REPLACE INTO users (user_id, balance, last_earn) VALUES (?, ?, ?)",
-        (user_id, balance, last_earn)
-    )
+def save_user(user_id, username, first_name, balance, last_earn):
+    cur.execute("""
+        UPDATE users
+        SET username=?, first_name=?, balance=?, last_earn=?
+        WHERE user_id=?
+    """, (username, first_name, balance, last_earn, user_id))
     conn.commit()
 
 
 def get_top_users(limit=10):
-    cur.execute(
-        "SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT ?",
-        (limit,)
-    )
+    cur.execute("""
+        SELECT first_name, username, balance
+        FROM users
+        ORDER BY balance DESC
+        LIMIT ?
+    """, (limit,))
     return cur.fetchall()
 
 
@@ -69,12 +78,12 @@ app = ApplicationBuilder().token(TOKEN).build()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! /earn /balance /top")
+    await update.message.reply_text("👋 Привет! Выбери /earn /balance /top")
 
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    balance, _ = get_user(user_id)
+    _, _, balance, _ = get_user(user_id)
 
     await update.message.reply_text(f"💰 Баланс: {balance} Бебракоинов")
 
@@ -82,9 +91,11 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
-    name = user.first_name
 
-    balance, last_earn = get_user(user_id)
+    username = user.username or ""
+    first_name = user.first_name or "Игрок"
+
+    _, _, balance, last_earn = get_user(user_id)
     now = int(time.time())
 
     # cooldown
@@ -102,26 +113,27 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if roll < 0.69:
         coins = random.randint(10, 35)
-        text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
+        text = f"💰 {first_name} получил премию: {coins} Бебракоинов! 🎉"
 
     elif roll < 0.89:
         coins = random.randint(36, 70)
-        text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
+        text = f"💰 {first_name} получил премию: {coins} Бебракоинов! 🎉"
 
     elif roll < 0.96:
         coins = random.randint(71, 120)
-        text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
+        text = f"💰 {first_name} получил премию: {coins} Бебракоинов! 🎉"
 
     elif roll < 0.993:
         coins = random.randint(121, 155)
-        text = f"💰 {name} получил премию в сумму: {coins} Бебракоинов! 🎉"
+        text = f"💰 {first_name} получил премию: {coins} Бебракоинов! 🎉"
 
     else:
         coins = random.randint(233, 855)
-        text = f"😱 Ничего себе! {name} по дороге на работу нашёл {coins} Бебракоинов! Вот это везение! 💸"
+        text = f"😱 {first_name} нашёл {coins} Бебракоинов! 💸"
 
     balance += coins
-    save_user(user_id, balance, now)
+
+    save_user(user_id, username, first_name, balance, now)
 
     await update.message.reply_text(text)
 
@@ -133,12 +145,33 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Пока нет игроков 😢")
         return
 
+    medals = ["🥇", "🥈", "🥉"]
+
     text = "🏆 Топ игроков:\n\n"
 
-    for i, (user_id, balance) in enumerate(top_users, start=1):
-        text += f"{i}. ID {user_id} — {balance} 💰\n"
+    for i, (first_name, username, balance) in enumerate(top_users):
+
+        if username:
+            name = f"@{username}"
+        else:
+            name = first_name or "Игрок"
+
+        medal = medals[i] if i < 3 else f"{i+1}."
+
+        text += f"{medal} {name} — {balance} 💰\n"
 
     await update.message.reply_text(text)
+
+
+# ---------------- COMMAND MENU (/ /commands) ----------------
+
+async def set_commands(app):
+    await app.bot.set_my_commands([
+        BotCommand("earn", "Заработать Бебракоины"),
+        BotCommand("balance", "Показать баланс"),
+        BotCommand("top", "Топ игроков"),
+        BotCommand("start", "Старт"),
+    ])
 
 
 # ---------------- HANDLERS ----------------
@@ -169,6 +202,9 @@ async def webhook_handler(request):
 async def run_server():
     await app.initialize()
     await app.start()
+
+    # 🔥 SET COMMAND MENU HERE
+    await set_commands(app)
 
     server = web.Application()
     server.router.add_get("/", ping)
