@@ -2,10 +2,8 @@ import random
 import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from aiogram import Bot
 
 TOKEN = os.getenv("BOT_TOKEN")
-client = Bot(token=TOKEN)
 
 user_balance = {}
 
