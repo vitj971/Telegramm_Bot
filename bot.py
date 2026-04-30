@@ -3,6 +3,8 @@ import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
+client: Bot = Bot(token=config.bot_token)
+
 TOKEN = os.getenv("BOT_TOKEN")
 
 user_balance = {}
