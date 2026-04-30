@@ -9,12 +9,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 # ---------------- env ----------------
 
 TOKEN = os.getenv("BOT_TOKEN")
-BASE_URL = os.getenv("RENDER_EXTERNAL_URL")
 
 if not TOKEN:
     raise ValueError("BOT_TOKEN не задан")
-if not BASE_URL:
-    raise ValueError("RENDER_EXTERNAL_URL не задан")
 
 # ---------------- memory ----------------
 
@@ -47,16 +44,12 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_balance[user_id] = user_balance.get(user_id, 0) + coins
 
-    await update.message.reply_text(
-        f"+{coins} 💰 Баланс: {user_balance[user_id]}"
-    )
+    await update.message.reply_text(f"+{coins} 💰 Баланс: {user_balance[user_id]}")
 
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    await update.message.reply_text(
-        f"Баланс: {user_balance.get(user_id, 0)} 💸"
-    )
+    await update.message.reply_text(f"Баланс: {user_balance.get(user_id, 0)} 💸")
 
 
 app.add_handler(CommandHandler("start", start))
@@ -66,11 +59,17 @@ app.add_handler(CommandHandler("balance", balance))
 
 # ---------------- webhook ----------------
 
-async def webhook_handler(request):
-    data = await request.json()
+async def ping(request):
+    return web.Response(text="ok")
 
-    update = Update.de_json(data, app.bot)
-    await app.process_update(update)
+
+async def webhook_handler(request):
+    try:
+        data = await request.json()
+        update = Update.de_json(data, app.bot)
+        await app.process_update(update)
+    except Exception as e:
+        print("Webhook error:", e)
 
     return web.Response(text="ok")
 
@@ -80,7 +79,12 @@ async def run_server():
     await app.start()
 
     server = web.Application()
-    server.router.add_post(f"/{TOKEN}", webhook_handler)
+
+    # health check (для UptimeRobot)
+    server.router.add_get("/", ping)
+
+    # webhook endpoint (стабильный)
+    server.router.add_post("/webhook", webhook_handler)
 
     runner = web.AppRunner(server)
     await runner.setup()
@@ -88,10 +92,17 @@ async def run_server():
     site = web.TCPSite(runner, "0.0.0.0", 10000)
     await site.start()
 
-    webhook_url = f"{BASE_URL}/{TOKEN}"
+    # 🔥 FIX: правильный Replit URL
+    repl_slug = os.getenv("REPL_SLUG")
+    repl_owner = os.getenv("REPL_OWNER")
+
+    BASE_URL = f"https://{repl_slug}.{repl_owner}.repl.co"
+
+    webhook_url = f"{BASE_URL}/webhook"
+
     await app.bot.set_webhook(url=webhook_url)
 
-    print("🤖 Bot started (webhook mode)")
+    print("🤖 Bot started:", webhook_url)
 
     while True:
         await asyncio.sleep(3600)
