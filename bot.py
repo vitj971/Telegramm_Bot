@@ -105,10 +105,24 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:  # 0.7%
         coins = random.randint(233, 855)
-        text = f"😱 Ничего себе! {name} по дороге на работу нашёл {coins} Бебракоинов! Вот это везение! 🪙"
+        text = f"😱 Ничего себе! {name} по дороге на работу нашёл {coins} Бебракоинов! Вот это везение! 💸"
 
     balance += coins
     update_user(user_id, balance, now)
+
+    await update.message.reply_text(text)
+ 
+    async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    top_users = get_top_users(10)
+
+    if not top_users:
+        await update.message.reply_text("Пока нет игроков 😢")
+        return
+
+    text = "🏆 Топ игроков:\n\n"
+
+    for i, (user_id, balance) in enumerate(top_users, start=1):
+        text += f"{i}. ID {user_id} — {balance} 💰\n"
 
     await update.message.reply_text(text)
 
@@ -118,6 +132,7 @@ async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("earn", earn))
 app.add_handler(CommandHandler("balance", balance))
+app.add_handler(CommandHandler("top", top))
 
 
 # ---------------- webhook ----------------
