@@ -1,3 +1,6 @@
+print("TOKEN:", os.getenv("BOT_TOKEN"))
+print("URL:", os.getenv("RENDER_EXTERNAL_URL"))
+
 import os
 import random
 import asyncio
